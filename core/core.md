@@ -18,6 +18,159 @@
 
 2. Làm thế nào để xử lý race conditions trong Golang? Bạn có thể giải thích về **sync.Mutex** và **sync.RWMutex** và sự khác biệt của chúng không?
 
+Để xử lý **race conditions** trong Golang, bạn có thể sử dụng các cơ chế đồng bộ sau đây:
+
+### 1. **sync.Mutex**
+
+- **sync.Mutex** là một cơ chế đồng bộ đơn giản để đảm bảo rằng chỉ một goroutine có thể truy cập vào một phần tài nguyên chia sẻ tại một thời điểm.
+- **Mutex** hoạt động như một khoá: một goroutine khi cần truy cập tài nguyên sẽ "khóa" tài nguyên đó, và các goroutine khác phải chờ cho đến khi nó "mở khóa" lại tài nguyên.
+
+**Ví dụ:**
+
+```go
+    package main
+
+    import (
+        "fmt"
+        "sync"
+    )
+
+    var counter int
+    var mu sync.Mutex
+
+    func increment() {
+        mu.Lock()          // Lock the critical section
+        counter++
+        mu.Unlock()        // Unlock the critical section
+    }
+
+    func main() {
+        var wg sync.WaitGroup
+        for i := 0; i < 1000; i++ {
+            wg.Add(1)
+            go func() {
+                defer wg.Done()
+                increment()
+            }()
+        }
+        wg.Wait()
+        fmt.Println("Counter:", counter)
+    }
+```
+
+Trong ví dụ trên, **Mutex** giúp đảm bảo rằng không có hai goroutines nào truy cập vào **counter** đồng thời, ngăn chặn race condition.
+
+### 2. **sync.RWMutex**
+
+- **sync.RWMutex** là một loại mutex đặc biệt cho phép nhiều goroutines đọc tài nguyên đồng thời, nhưng chỉ cho phép một goroutine ghi tài nguyên. Điều này giúp tối ưu hiệu suất khi phần lớn các thao tác là đọc, nhưng vẫn đảm bảo an toàn khi ghi.
+
+**Ví dụ:**
+
+```go
+    package main
+
+    import (
+        "fmt"
+        "sync"
+    )
+
+    var counter int
+    var mu sync.RWMutex
+
+    func read() int {
+        mu.RLock()   // Lock for reading
+        defer mu.RUnlock()
+        return counter
+    }
+
+    func write() {
+        mu.Lock()    // Lock for writing
+        counter++
+        mu.Unlock()
+    }
+
+    func main() {
+        var wg sync.WaitGroup
+        for i := 0; i < 1000; i++ {
+            wg.Add(1)
+            go func() {
+                defer wg.Done()
+                write()
+            }()
+        }
+        wg.Wait()
+        fmt.Println("Counter:", read()) // Safe to read after all writes are done
+    }
+```
+
+Sử dụng **RWMutex** giúp tăng hiệu suất trong trường hợp nhiều goroutines thực hiện thao tác đọc, nhưng vẫn đảm bảo an toàn khi có thao tác ghi.
+
+### 3. **Channel**
+
+- **Channel** trong Golang có thể được sử dụng để giao tiếp giữa các goroutines và đảm bảo sự đồng bộ giữa chúng mà không cần sử dụng mutex.
+- Bạn có thể sử dụng **channel** để truyền dữ liệu giữa các goroutines, giúp tránh race conditions khi các goroutines cần chia sẻ dữ liệu.
+
+**Ví dụ:**
+
+```go
+    package main
+
+    import "fmt"
+
+    func main() {
+        ch := make(chan int)
+        go func() {
+            ch <- 42
+        }()
+
+        result := <-ch
+        fmt.Println("Received:", result)
+    }
+```
+
+Trong ví dụ này, việc truyền giá trị qua channel giúp đồng bộ hóa các goroutines mà không gặp phải race conditions.
+
+### 4. **Atomic Operations**
+
+- Golang cung cấp package **sync/atomic** để thực hiện các thao tác nguyên tử (atomic operations), giúp xử lý race conditions mà không cần sử dụng mutex. Các phép toán nguyên tử có thể được sử dụng để thay đổi các giá trị như **int32**, **int64**, **uint32**, v.v.
+
+**Ví dụ:**
+
+```go
+    package main
+
+    import (
+        "fmt"
+        "sync"
+        "sync/atomic"
+    )
+
+    var counter int64
+
+    func increment() {
+        atomic.AddInt64(&counter, 1) // Thực hiện phép cộng nguyên tử
+    }
+
+    func main() {
+        var wg sync.WaitGroup
+        for i := 0; i < 1000; i++ {
+            wg.Add(1)
+            go func() {
+                defer wg.Done()
+                increment()
+            }()
+        }
+        wg.Wait()
+        fmt.Println("Counter:", counter)
+    }
+```
+
+**atomic.AddInt64** thực hiện phép cộng an toàn mà không gặp phải race condition.
+
+### Kết luận:
+
+Để xử lý **race conditions** trong Golang, bạn có thể sử dụng các cơ chế đồng bộ như **sync.Mutex**, **sync.RWMutex**, **channel**, hoặc **atomic operations**. Việc chọn giải pháp nào phụ thuộc vào yêu cầu về hiệu suất và tính đồng thời của ứng dụng.
+
 - Có thể sử dụng `sync.Mutex` để đồng bộ hóa việc truy cập vào tài nguyên chia sẻ, ngăn chặn race conditions. `sync.RWMutex` cho phép đọc đồng thời nhiều goroutine nhưng chỉ cho phép một goroutine ghi, giúp tối ưu hiệu suất khi có nhiều thao tác đọc.
 
 3. Bạn có thể giải thích cách sử dụng **select** statement trong Golang và khi nào nó hữu ích trong việc quản lý nhiều channel?
